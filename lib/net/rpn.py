@@ -13,7 +13,7 @@ class RPN(nn.Module):
         super().__init__()
         self.training_mode = (mode == 'TRAIN')
 
-        MODEL = importlib.import_module(cfg.RPN.BACKBONE)
+        MODEL = importlib.import_module(cfg.RPN.BACKBONE) # default: pointnet2_msg
         self.backbone_net = MODEL.get_model(input_channels=int(cfg.RPN.USE_INTENSITY), use_xyz=use_xyz)
 
         # classification branch
@@ -45,6 +45,17 @@ class RPN(nn.Module):
             reg_layers.insert(1, nn.Dropout(cfg.RPN.DP_RATIO))
         self.rpn_reg_layer = nn.Sequential(*reg_layers)
 
+        # part branch
+        prt_layers = []
+        pre_channel = cfg.RPN.FP_MLPS[0][-1]
+        for k in range(0, cfg.RPN.PRT_FC.__len__()):
+            prt_layers.append(pt_utils.Conv1d(pre_channel, cfg.RPN.PRT_FC[k], bn=cfg.RPN.USE_BN))
+            pre_channel = cfg.RPN.PRT_FC[k]
+        prt_layers.append(pt_utils.Conv1d(pre_channel, 3, activation=None))
+        if cfg.RPN.DP_RATIO >= 0:
+            prt_layers.insert(1, nn.Dropout(cfg.RPN.DP_RATIO))
+        self.rpn_prt_layer = nn.Sequential(*prt_layers)
+
         if cfg.RPN.LOSS_CLS == 'DiceLoss':
             self.rpn_cls_loss_func = loss_utils.DiceLoss(ignore_target=-1)
         elif cfg.RPN.LOSS_CLS == 'SigmoidFocalLoss':
@@ -64,6 +75,7 @@ class RPN(nn.Module):
             nn.init.constant_(self.rpn_cls_layer[2].conv.bias, -np.log((1 - pi) / pi))
 
         nn.init.normal_(self.rpn_reg_layer[-1].conv.weight, mean=0, std=0.001)
+        nn.init.normal_(self.rpn_prt_layer[-1].conv.weight, mean=0, std=0.001) # ?
 
     def forward(self, input_data):
         """
@@ -75,8 +87,9 @@ class RPN(nn.Module):
 
         rpn_cls = self.rpn_cls_layer(backbone_features).transpose(1, 2).contiguous()  # (B, N, 1)
         rpn_reg = self.rpn_reg_layer(backbone_features).transpose(1, 2).contiguous()  # (B, N, C)
+        rpn_prt = self.rpn_prt_layer(backbone_features).transpose(1, 2).contiguous()  # (B, N, 3)
 
-        ret_dict = {'rpn_cls': rpn_cls, 'rpn_reg': rpn_reg,
+        ret_dict = {'rpn_cls': rpn_cls, 'rpn_reg': rpn_reg, 'rpn_prt': rpn_prt,
                     'backbone_xyz': backbone_xyz, 'backbone_features': backbone_features}
 
         return ret_dict

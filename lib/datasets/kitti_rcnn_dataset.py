@@ -352,27 +352,29 @@ class KittiRCNNDataset(KittiDataset):
             return sample_info
 
         # generate training labels
-        rpn_cls_label, rpn_reg_label = self.generate_rpn_training_labels(aug_pts_rect, aug_gt_boxes3d)
+        rpn_cls_label, rpn_reg_label, rpn_prt_label = self.generate_rpn_training_labels(aug_pts_rect, aug_gt_boxes3d)
         sample_info['pts_input'] = pts_input
         sample_info['pts_rect'] = aug_pts_rect
         sample_info['pts_features'] = ret_pts_features
         sample_info['rpn_cls_label'] = rpn_cls_label
         sample_info['rpn_reg_label'] = rpn_reg_label
+        sample_info['rpn_prt_label'] = rpn_prt_label
         sample_info['gt_boxes3d'] = aug_gt_boxes3d
         return sample_info
 
     @staticmethod
-    def generate_rpn_training_labels(pts_rect, gt_boxes3d):
+    def generate_rpn_training_labels(pts_rect, gt_boxes3d): # what we should modified
         cls_label = np.zeros((pts_rect.shape[0]), dtype=np.int32)
         reg_label = np.zeros((pts_rect.shape[0], 7), dtype=np.float32)  # dx, dy, dz, ry, h, w, l
+        prt_label = np.zeros((pts_rect.shape[0], 3), dtype=np.float32)
         gt_corners = kitti_utils.boxes3d_to_corners3d(gt_boxes3d, rotate=True)
         extend_gt_boxes3d = kitti_utils.enlarge_box3d(gt_boxes3d, extra_width=0.2)
         extend_gt_corners = kitti_utils.boxes3d_to_corners3d(extend_gt_boxes3d, rotate=True)
         for k in range(gt_boxes3d.shape[0]):
             box_corners = gt_corners[k]
-            fg_pt_flag = kitti_utils.in_hull(pts_rect, box_corners)
-            fg_pts_rect = pts_rect[fg_pt_flag]
-            cls_label[fg_pt_flag] = 1
+            fg_pt_flag = kitti_utils.in_hull(pts_rect, box_corners) # (N,)
+            fg_pts_rect = pts_rect[fg_pt_flag] # (M, 3)
+            cls_label[fg_pt_flag] = 1 # (N,)
 
             # enlarge the bbox3d, ignore nearby points
             extend_box_corners = extend_gt_corners[k]
@@ -383,15 +385,22 @@ class KittiRCNNDataset(KittiDataset):
             # pixel offset of object center
             center3d = gt_boxes3d[k][0:3].copy()  # (x, y, z)
             center3d[1] -= gt_boxes3d[k][3] / 2
-            reg_label[fg_pt_flag, 0:3] = center3d - fg_pts_rect  # Now y is the true center of 3d box 20180928
+            size3d = gt_boxes3d[k][[5, 3, 4]] # (l, h, w)
+            ry3d = gt_boxes3d[k][6]
+
+            # part label encoding
+            local_coor = fg_pts_rect - center3d
+            local_coor_cano = kitti_utils.rotate_pc_along_y(local_coor, ry3d)
+            prt_label[fg_pt_flag] = local_coor_cano / size3d + 0.5 # x, y, z in range [0., 1.]
 
             # size and angle encoding
+            reg_label[fg_pt_flag, 0:3] = center3d - fg_pts_rect  # Now y is the true center of 3d box 20180928
             reg_label[fg_pt_flag, 3] = gt_boxes3d[k][3]  # h
             reg_label[fg_pt_flag, 4] = gt_boxes3d[k][4]  # w
             reg_label[fg_pt_flag, 5] = gt_boxes3d[k][5]  # l
             reg_label[fg_pt_flag, 6] = gt_boxes3d[k][6]  # ry
 
-        return cls_label, reg_label
+        return cls_label, reg_label, prt_label.clip(0., 1.)
 
     def rotate_box3d_along_y(self, box3d, rot_angle):
         old_x, old_z, ry = box3d[0], box3d[2], box3d[6]

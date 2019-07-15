@@ -61,6 +61,7 @@ __C.RPN.SA_CONFIG.MLPS = [[[16, 16, 32], [32, 32, 64]],
 __C.RPN.FP_MLPS = [[128, 128], [256, 256], [512, 512], [512, 512]]
 __C.RPN.CLS_FC = [128]
 __C.RPN.REG_FC = [128]
+__C.RPN.PRT_FC = [128]
 __C.RPN.DP_RATIO = 0.5
 
 # config of training
@@ -69,7 +70,7 @@ __C.RPN.FG_WEIGHT = 15
 __C.RPN.FOCAL_ALPHA = [0.25, 0.75]
 __C.RPN.FOCAL_GAMMA = 2.0
 __C.RPN.REG_LOSS_WEIGHT = [1.0, 1.0, 1.0, 1.0]
-__C.RPN.LOSS_WEIGHT = [1.0, 1.0]
+__C.RPN.LOSS_WEIGHT = [1.0, 1.0, 1.0]
 __C.RPN.NMS_TYPE = 'normal'  # normal, rotate
 
 # config of testing
