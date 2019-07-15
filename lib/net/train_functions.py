@@ -116,7 +116,7 @@ def model_joint_fn_decorator():
         rpn_prt_flat = rpn_prt.view(-1)
         rpn_prt_label_flat = rpn_prt_label.view(-1)
         weight = rpn_prt_flat.new(rpn_prt_flat.shape[0]).fill_(0.0)
-        weight[fg_mask] = cfg.RPN.FG_WEIGHT
+        weight[fg_mask.repeat(3)] = cfg.RPN.FG_WEIGHT / 3.0
         rpn_loss_prt_sum = F.binary_cross_entropy_with_logits(rpn_prt_flat, rpn_prt_label_flat,
                                                               weight=weight, reduction='sum')
         rpn_loss_prt = rpn_loss_prt_sum / torch.clamp(fg_mask.float().sum(), min=1.0)

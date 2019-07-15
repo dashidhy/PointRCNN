@@ -20,13 +20,13 @@ from tools.train_utils import learning_schedules_fastai as lsf
 
 
 parser = argparse.ArgumentParser(description="arg parser")
-parser.add_argument('--cfg_file', type=str, default='cfgs/default.yaml', help='specify the config for training')
+parser.add_argument('--cfg_file', type=str, default='cfgs/part.yaml', help='specify the config for training')
 parser.add_argument("--train_mode", type=str, default='rpn', required=True, help="specify the training mode")
 parser.add_argument("--batch_size", type=int, default=16, required=True, help="batch size for training")
 parser.add_argument("--epochs", type=int, default=200, required=True, help="Number of epochs to train for")
 
 parser.add_argument('--workers', type=int, default=8, help='number of workers for dataloader')
-parser.add_argument("--ckpt_save_interval", type=int, default=5, help="number of training epochs")
+parser.add_argument("--ckpt_save_interval", type=int, default=5, help="number of training epochs per model saving")
 parser.add_argument('--output_dir', type=str, default=None, help='specify an output directory if needed')
 parser.add_argument('--mgpus', action='store_true', default=False, help='whether to use multiple gpu')
 
@@ -45,6 +45,8 @@ parser.add_argument("--rcnn_eval_roi_dir", type=str, default=None,
                     help='specify the saved rois for rcnn evaluation when using rcnn_offline mode')
 parser.add_argument("--rcnn_eval_feature_dir", type=str, default=None,
                     help='specify the saved features for rcnn evaluation when using rcnn_offline mode')
+parser.add_argument("--train_rpn_without_reg_branch", action='store_true', default=False,
+                    help='do not train regression branch by set its weight to 0')
 args = parser.parse_args()
 
 
@@ -151,6 +153,8 @@ if __name__ == "__main__":
     if args.train_mode == 'rpn':
         cfg.RPN.ENABLED = True
         cfg.RCNN.ENABLED = False
+        if args.train_rpn_without_reg_branch:
+            cfg.RPN.LOSS_WEIGHT[1] = 0.0
         root_result_dir = os.path.join('../', 'output', 'rpn', cfg.TAG)
     elif args.train_mode == 'rcnn':
         cfg.RCNN.ENABLED = True
