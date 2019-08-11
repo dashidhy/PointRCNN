@@ -27,24 +27,6 @@ class RPN(nn.Module):
             cls_layers.insert(1, nn.Dropout(cfg.RPN.DP_RATIO))
         self.rpn_cls_layer = nn.Sequential(*cls_layers)
 
-        # regression branch
-        per_loc_bin_num = int(cfg.RPN.LOC_SCOPE / cfg.RPN.LOC_BIN_SIZE) * 2
-        if cfg.RPN.LOC_XZ_FINE:
-            reg_channel = per_loc_bin_num * 4 + cfg.RPN.NUM_HEAD_BIN * 2 + 3
-        else:
-            reg_channel = per_loc_bin_num * 2 + cfg.RPN.NUM_HEAD_BIN * 2 + 3
-        reg_channel += 1  # reg y
-
-        reg_layers = []
-        pre_channel = cfg.RPN.FP_MLPS[0][-1]
-        for k in range(0, cfg.RPN.REG_FC.__len__()):
-            reg_layers.append(pt_utils.Conv1d(pre_channel, cfg.RPN.REG_FC[k], bn=cfg.RPN.USE_BN))
-            pre_channel = cfg.RPN.REG_FC[k]
-        reg_layers.append(pt_utils.Conv1d(pre_channel, reg_channel, activation=None))
-        if cfg.RPN.DP_RATIO >= 0:
-            reg_layers.insert(1, nn.Dropout(cfg.RPN.DP_RATIO))
-        self.rpn_reg_layer = nn.Sequential(*reg_layers)
-
         # part branch
         prt_layers = []
         pre_channel = cfg.RPN.FP_MLPS[0][-1]
@@ -74,7 +56,6 @@ class RPN(nn.Module):
             pi = 0.01
             nn.init.constant_(self.rpn_cls_layer[2].conv.bias, -np.log((1 - pi) / pi))
 
-        nn.init.normal_(self.rpn_reg_layer[-1].conv.weight, mean=0, std=0.001)
         nn.init.normal_(self.rpn_prt_layer[-1].conv.weight, mean=0, std=0.001) # ?
 
     def forward(self, input_data):
@@ -86,10 +67,9 @@ class RPN(nn.Module):
         backbone_xyz, backbone_features = self.backbone_net(pts_input)  # (B, N, 3), (B, C, N)
 
         rpn_cls = self.rpn_cls_layer(backbone_features).transpose(1, 2).contiguous()  # (B, N, 1)
-        rpn_reg = self.rpn_reg_layer(backbone_features).transpose(1, 2).contiguous()  # (B, N, C)
         rpn_prt = self.rpn_prt_layer(backbone_features).transpose(1, 2).contiguous()  # (B, N, 3)
 
-        ret_dict = {'rpn_cls': rpn_cls, 'rpn_reg': rpn_reg, 'rpn_prt': rpn_prt,
+        ret_dict = {'rpn_cls': rpn_cls, 'rpn_prt': rpn_prt,
                     'backbone_xyz': backbone_xyz, 'backbone_features': backbone_features}
 
         return ret_dict

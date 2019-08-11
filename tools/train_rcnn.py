@@ -45,8 +45,7 @@ parser.add_argument("--rcnn_eval_roi_dir", type=str, default=None,
                     help='specify the saved rois for rcnn evaluation when using rcnn_offline mode')
 parser.add_argument("--rcnn_eval_feature_dir", type=str, default=None,
                     help='specify the saved features for rcnn evaluation when using rcnn_offline mode')
-parser.add_argument("--train_rpn_without_reg_branch", action='store_true', default=False,
-                    help='do not train regression branch by set its weight to 0')
+parser.add_argument('--train_part', action='store_true', default=False, help='whether to train part label')
 args = parser.parse_args()
 
 
@@ -153,7 +152,7 @@ if __name__ == "__main__":
     if args.train_mode == 'rpn':
         cfg.RPN.ENABLED = True
         cfg.RCNN.ENABLED = False
-        if args.train_rpn_without_reg_branch:
+        if not args.train_part:
             cfg.RPN.LOSS_WEIGHT[1] = 0.0
         root_result_dir = os.path.join('../', 'output', 'rpn', cfg.TAG)
     elif args.train_mode == 'rcnn':

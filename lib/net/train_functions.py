@@ -16,9 +16,8 @@ def model_joint_fn_decorator():
             gt_boxes3d = data['gt_boxes3d']
 
             if not cfg.RPN.FIXED:
-                rpn_cls_label, rpn_reg_label, rpn_prt_label = data['rpn_cls_label'], data['rpn_reg_label'], data['rpn_prt_label']
+                rpn_cls_label, rpn_prt_label = data['rpn_cls_label'], data['rpn_prt_label']
                 rpn_cls_label = torch.from_numpy(rpn_cls_label).cuda(non_blocking=True).long()
-                rpn_reg_label = torch.from_numpy(rpn_reg_label).cuda(non_blocking=True).float()
                 rpn_prt_label = torch.from_numpy(rpn_prt_label).cuda(non_blocking=True).float()
 
             inputs = torch.from_numpy(pts_input).cuda(non_blocking=True).float()
@@ -39,8 +38,8 @@ def model_joint_fn_decorator():
         disp_dict = {}
         loss = 0
         if cfg.RPN.ENABLED and not cfg.RPN.FIXED:
-            rpn_cls, rpn_reg, rpn_prt = ret_dict['rpn_cls'], ret_dict['rpn_reg'], ret_dict['rpn_prt']
-            rpn_loss = get_rpn_loss(model, rpn_cls, rpn_reg, rpn_prt, rpn_cls_label, rpn_reg_label, rpn_prt_label, tb_dict)
+            rpn_cls, rpn_prt = ret_dict['rpn_cls'], ret_dict['rpn_prt']
+            rpn_loss = get_rpn_loss(model, rpn_cls, rpn_prt, rpn_cls_label, rpn_prt_label, tb_dict)
             loss += rpn_loss
             disp_dict['rpn_loss'] = rpn_loss.item()
 
@@ -53,7 +52,7 @@ def model_joint_fn_decorator():
 
         return ModelReturn(loss, tb_dict, disp_dict)
 
-    def get_rpn_loss(model, rpn_cls, rpn_reg, rpn_prt, rpn_cls_label, rpn_reg_label, rpn_prt_label, tb_dict):
+    def get_rpn_loss(model, rpn_cls, rpn_prt, rpn_cls_label, rpn_prt_label, tb_dict):
         if isinstance(model, nn.DataParallel):
             rpn_cls_loss_func = model.module.rpn.rpn_cls_loss_func
         else:
@@ -91,26 +90,6 @@ def model_joint_fn_decorator():
             rpn_loss_cls = (batch_loss_cls * cls_valid_mask).sum() / torch.clamp(cls_valid_mask.sum(), min=1.0)
         else:
             raise NotImplementedError
-
-        # RPN regression loss
-        point_num = rpn_reg.size(0) * rpn_reg.size(1)
-        fg_sum = fg_mask.long().sum().item()
-        if fg_sum != 0:
-            loss_loc, loss_angle, loss_size, reg_loss_dict = \
-                loss_utils.get_reg_loss(rpn_reg.view(point_num, -1)[fg_mask],
-                                        rpn_reg_label.view(point_num, 7)[fg_mask],
-                                        loc_scope=cfg.RPN.LOC_SCOPE,
-                                        loc_bin_size=cfg.RPN.LOC_BIN_SIZE,
-                                        num_head_bin=cfg.RPN.NUM_HEAD_BIN,
-                                        anchor_size=MEAN_SIZE,
-                                        get_xz_fine=cfg.RPN.LOC_XZ_FINE,
-                                        get_y_by_bin=False,
-                                        get_ry_fine=False)
-
-            loss_size = 3 * loss_size  # consistent with old codes
-            rpn_loss_reg = loss_loc + loss_angle + loss_size
-        else:
-            loss_loc = loss_angle = loss_size = rpn_loss_reg = rpn_loss_cls * 0
         
         # RPN part loss
         rpn_prt_flat = rpn_prt.view(-1)
@@ -121,11 +100,9 @@ def model_joint_fn_decorator():
                                                               weight=weight, reduction='sum')
         rpn_loss_prt = rpn_loss_prt_sum / torch.clamp(fg_mask.float().sum(), min=1.0)
 
-        rpn_loss = rpn_loss_cls * cfg.RPN.LOSS_WEIGHT[0] + rpn_loss_reg * cfg.RPN.LOSS_WEIGHT[1] + rpn_loss_prt * cfg.RPN.LOSS_WEIGHT[2]
+        rpn_loss = rpn_loss_cls * cfg.RPN.LOSS_WEIGHT[0] + rpn_loss_prt * cfg.RPN.LOSS_WEIGHT[1]
 
-        tb_dict.update({'rpn_loss_cls': rpn_loss_cls.item(), 'rpn_loss_reg': rpn_loss_reg.item(), 'rpn_loss_prt': rpn_loss_prt.item(),
-                        'rpn_loss': rpn_loss.item(), 'rpn_fg_sum': fg_sum, 'rpn_loss_loc': loss_loc.item(),
-                        'rpn_loss_angle': loss_angle.item(), 'rpn_loss_size': loss_size.item()})
+        tb_dict.update({'rpn_loss_cls': rpn_loss_cls.item(), 'rpn_loss_prt': rpn_loss_prt.item(), 'rpn_loss': rpn_loss.item()})
 
         return rpn_loss
 
