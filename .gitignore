@@ -9,3 +9,5 @@
 **/*.egg-info
 **/dist
 tools/gt_database/
+core*
+*.ipynb
