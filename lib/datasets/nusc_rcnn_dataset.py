@@ -23,7 +23,8 @@ class nuScenesRCNNDataset(nuScenesDataset):
         return self.sample_tokens.__len__()
     
     def __getitem__(self, index):
-        return self.get_rpn_sample(index)
+        sample_info = self.nusc.get('sample', self.sample_tokens[index])
+        return self.get_rpn_sample(sample_info)
     
     @staticmethod
     def remove_useless_points(pc):
@@ -92,10 +93,9 @@ class nuScenesRCNNDataset(nuScenesDataset):
                     break
         return valid_ann_infos
     
-    def get_rpn_sample(self, index):
+    def get_rpn_sample(self, sample_info):
         
         # get original data and preprocess point cloud and labels
-        sample_info = self.nusc.get('sample', self.sample_tokens[index])
         sample_outputs = {'token': sample_info['token']}
         sample_lidar_pc, sample_lidar_ep_info, sample_lidar_cs_info = self.get_lidar(sample_info)
         sample_lidar_pc = self.remove_useless_points(sample_lidar_pc)
