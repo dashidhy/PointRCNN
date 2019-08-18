@@ -3,7 +3,7 @@ import numpy as np
 import torch
 from pyquaternion import Quaternion
 from lib.datasets.nusc_dataset import nuScenesDataset
-import lib.utils.kitti_utils as nusc_utils
+import lib.utils.kitti_utils as kitti_utils
 from lib.config import cfg
 
 class nuScenesRCNNDataset(nuScenesDataset):
@@ -222,18 +222,18 @@ class nuScenesRCNNDataset(nuScenesDataset):
     def generate_rpn_training_labels(points, bboxes, labels):
         cls_label = np.zeros((points.__len__()))
         reg_label = np.zeros((points.__len__(), 7))
-        corners = nusc_utils.boxes3d_to_corners3d(bboxes)
-        extend_bboxes = nusc_utils.enlarge_box3d(bboxes, extra_width=0.1)
-        extend_corners = nusc_utils.boxes3d_to_corners3d(extend_bboxes)
+        corners = kitti_utils.boxes3d_to_corners3d(bboxes)
+        extend_bboxes = kitti_utils.enlarge_box3d(bboxes, extra_width=0.1)
+        extend_corners = kitti_utils.boxes3d_to_corners3d(extend_bboxes)
         for k in range(bboxes.__len__()):
             box_corners = corners[k]
-            fg_pt_flag = nusc_utils.in_hull(points, box_corners) # (N,)
+            fg_pt_flag = kitti_utils.in_hull(points, box_corners) # (N,)
             fg_points = points[fg_pt_flag] # (M, 3)
             cls_label[fg_pt_flag] = labels[k] # (N,)
 
             # enlarge the bbox3d, ignore nearby points
             extend_box_corners = extend_corners[k]
-            fg_enlarge_flag = nusc_utils.in_hull(points, extend_box_corners)
+            fg_enlarge_flag = kitti_utils.in_hull(points, extend_box_corners)
             ignore_flag = np.logical_xor(fg_pt_flag, fg_enlarge_flag)
             cls_label[ignore_flag] = -1
 
@@ -257,8 +257,8 @@ class nuScenesRCNNDataset(nuScenesDataset):
         aug_method = []
         if 'rotation' in aug_list and aug_enable[0] < cfg.AUG_METHOD_PROB[0]:
             angle = np.random.uniform(-np.pi / cfg.AUG_ROT_RANGE, np.pi / cfg.AUG_ROT_RANGE)
-            points = nusc_utils.rotate_pc_along_y(points, angle)
-            bboxes = nusc_utils.rotate_pc_along_y(bboxes, angle)
+            points = kitti_utils.rotate_pc_along_y(points, angle)
+            bboxes = kitti_utils.rotate_pc_along_y(bboxes, angle)
             bboxes[:, 6] -= angle
             aug_method.append(['rotation', angle])
 

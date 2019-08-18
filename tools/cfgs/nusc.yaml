@@ -76,6 +76,7 @@ RCNN:
     MASK_TYPE: seg
     USE_INTENSITY: False
     USE_DEPTH: True
+    MAX_DEPTH: 55.0
     USE_SEG_SCORE: False
 
     POOL_EXTRA_WIDTH: 1.0
