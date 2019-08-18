@@ -9,8 +9,7 @@ from lib.config import cfg
 class nuScenesRCNNDataset(nuScenesDataset):
 
     def __init__(self, dataroot, split, mode, classes='all', verbose=False, npoints=16384, random_select=True,
-                 logger=None, rcnn_training_roi_dir=None, rcnn_training_feature_dir=None, rcnn_eval_roi_dir=None,
-                 rcnn_eval_feature_dir=None, gt_database_dir=None):
+                 logger=None):
         assert mode in ['TRAIN', 'EVAL', 'TEST'], 'Invalid mode: %s' % mode
         super(nuScenesRCNNDataset, self).__init__(dataroot=dataroot, split=split, verbose=verbose)
         
@@ -26,17 +25,6 @@ class nuScenesRCNNDataset(nuScenesDataset):
         self.random_select = random_select
         self.npoints = npoints
         self.logger = logger
-
-        # for rcnn training
-        self.rcnn_training_bbox_list = []
-        self.rpn_feature_list = {}
-        self.pos_bbox_list = []
-        self.neg_bbox_list = []
-        self.far_neg_bbox_list = []
-        self.rcnn_eval_roi_dir = rcnn_eval_roi_dir
-        self.rcnn_eval_feature_dir = rcnn_eval_feature_dir
-        self.rcnn_training_roi_dir = rcnn_training_roi_dir
-        self.rcnn_training_feature_dir = rcnn_training_feature_dir
 
         if not self.random_select:
             self.logger.warning('random select is False')

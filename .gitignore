@@ -1,7 +1,7 @@
 *.yml
 *__pycache__*
 *_ext*
-/output
+/output*
 *.cu.o
 /data
 **/build
@@ -11,3 +11,5 @@
 tools/gt_database/
 *ipynb*
 .vscode
+core.*
+
