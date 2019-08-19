@@ -129,6 +129,8 @@ RCNN:
 TRAIN:
     SPLIT: train
     VAL_SPLIT: val
+    TRAIN_SUBSET: False
+    TRAIN_SUBSET_FOLD: 4
 
     LR: 0.002
     LR_CLIP: 0.00001

@@ -33,6 +33,8 @@ parser.add_argument('--mgpus', action='store_true', default=False, help='whether
 parser.add_argument("--ckpt", type=str, default=None, help="continue training from this checkpoint")
 parser.add_argument("--rpn_ckpt", type=str, default=None, help="specify the well-trained rpn checkpoint")
 parser.add_argument('--train_with_eval', action='store_true', default=False, help='whether to train with evaluation')
+parser.add_argument('--train_subset', action='store_true', default=False, help='whether to train on a subset')
+parser.add_argument('--train_subset_fold', type=int, default=4, help='training subset fold')
 args = parser.parse_args()
 
 
@@ -51,7 +53,8 @@ def create_dataloader(logger):
 
     # create dataloader
     train_set = nuScenesRCNNDataset(dataroot=DATA_PATH, npoints=cfg.RPN.NUM_POINTS, split=cfg.TRAIN.SPLIT, mode='TRAIN',
-                                    logger=logger, classes=cfg.CLASSES)
+                                    logger=logger, classes=cfg.CLASSES, train_subset=cfg.TRAIN.TRAIN_SUBSET,
+                                    train_subset_fold=cfg.TRAIN.TRAIN_SUBSET_FOLD)
     train_loader = DataLoader(train_set, batch_size=args.batch_size, pin_memory=True,
                               num_workers=args.workers, shuffle=True, collate_fn=train_set.collate_batch,
                               drop_last=True)
@@ -143,6 +146,9 @@ if __name__ == "__main__":
         root_result_dir = os.path.join('../', 'output', 'rcnn', cfg.TAG)
     else:
         raise NotImplementedError
+    
+    cfg.TRAIN.TRAIN_SUBSET = args.train_subset
+    cfg.TRAIN.TRAIN_SUBSET_FOLD = args.train_subset_fold
 
     if args.output_dir is not None:
         root_result_dir = args.output_dir
