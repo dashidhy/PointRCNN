@@ -1,4 +1,5 @@
 import os
+import random
 import numpy as np
 import torch
 from pyquaternion import Quaternion
@@ -8,8 +9,8 @@ from lib.config import cfg
 
 class nuScenesRCNNDataset(nuScenesDataset):
 
-    def __init__(self, dataroot, split, mode, classes='all', verbose=False, npoints=16384, random_select=True,
-                 logger=None):
+    def __init__(self, dataroot, split, mode, train_subset=False, train_subset_fold=4, 
+                 classes='all', verbose=False, npoints=16384, random_select=True, logger=None):
         assert mode in ['TRAIN', 'EVAL', 'TEST'], 'Invalid mode: %s' % mode
         super(nuScenesRCNNDataset, self).__init__(dataroot=dataroot, split=split, verbose=verbose)
         
@@ -31,6 +32,10 @@ class nuScenesRCNNDataset(nuScenesDataset):
         
         self.logger.info('Loading %s samples ... ' % self.mode)
         self.preprocess_rpn_training_data()
+
+        if train_subset:
+            subset_length = int(self.sample_tokens.__len__() / train_subset_fold)
+            self.sample_tokens = random.sample(self.sample_tokens, subset_length)
     
     def preprocess_rpn_training_data(self):
         """
