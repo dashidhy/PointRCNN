@@ -9,10 +9,10 @@ from lib.config import cfg
 
 class nuScenesRCNNDataset(nuScenesDataset):
 
-    def __init__(self, dataroot, split, mode, train_subset=False, train_subset_fold=4, 
-                 classes='all', verbose=False, npoints=16384, random_select=True, logger=None):
+    def __init__(self, nusc, split, mode, train_subset=False, train_subset_fold=4, 
+                 classes='all', npoints=16384, random_select=True, logger=None):
         assert mode in ['TRAIN', 'EVAL', 'TEST'], 'Invalid mode: %s' % mode
-        super(nuScenesRCNNDataset, self).__init__(dataroot=dataroot, split=split, verbose=verbose)
+        super(nuScenesRCNNDataset, self).__init__(nusc=nusc, split=split)
         
         self.mode = mode
         if classes == 'all':

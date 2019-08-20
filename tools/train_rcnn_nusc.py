@@ -10,6 +10,8 @@ import argparse
 import logging
 from functools import partial
 
+from nuscenes.nuscenes import NuScenes
+
 from lib.net.point_rcnn import PointRCNN
 import lib.net.train_functions as train_functions
 from lib.datasets.nusc_rcnn_dataset import nuScenesRCNNDataset
@@ -51,8 +53,10 @@ def create_logger(log_file):
 def create_dataloader(logger):
     DATA_PATH = os.path.join('../', 'data', 'nuScenes')
 
+    nusc = NuScenes(version='v1.0-trainval', dataroot=DATA_PATH, verbose=True)
+
     # create dataloader
-    train_set = nuScenesRCNNDataset(dataroot=DATA_PATH, npoints=cfg.RPN.NUM_POINTS, split=cfg.TRAIN.SPLIT, mode='TRAIN',
+    train_set = nuScenesRCNNDataset(nusc=nusc, npoints=cfg.RPN.NUM_POINTS, split=cfg.TRAIN.SPLIT, mode='TRAIN',
                                     logger=logger, classes=cfg.CLASSES, train_subset=cfg.TRAIN.TRAIN_SUBSET,
                                     train_subset_fold=cfg.TRAIN.TRAIN_SUBSET_FOLD)
     train_loader = DataLoader(train_set, batch_size=args.batch_size, pin_memory=True,
@@ -60,7 +64,7 @@ def create_dataloader(logger):
                               drop_last=True)
 
     if args.train_with_eval:
-        test_set = nuScenesRCNNDataset(dataroot=DATA_PATH, npoints=cfg.RPN.NUM_POINTS, split=cfg.TRAIN.VAL_SPLIT, mode='EVAL',
+        test_set = nuScenesRCNNDataset(nusc=nusc, npoints=cfg.RPN.NUM_POINTS, split=cfg.TRAIN.VAL_SPLIT, mode='EVAL',
                                        logger=logger, classes=cfg.CLASSES)
         test_loader = DataLoader(test_set, batch_size=1, shuffle=True, pin_memory=True,
                                  num_workers=args.workers, collate_fn=test_set.collate_batch)
