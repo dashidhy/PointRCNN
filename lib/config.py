@@ -144,6 +144,7 @@ __C.TRAIN = edict()
 __C.TRAIN.SPLIT = 'train'
 __C.TRAIN.VAL_SPLIT = 'smallval'
 __C.TRAIN.TRAIN_SUBSET = False
+__C.TRAIN.TRAIN_SUBSET_FILE = None
 __C.TRAIN.TRAIN_SUBSET_FOLD = 4
 
 __C.TRAIN.LR = 0.002

@@ -9,8 +9,9 @@ from lib.config import cfg
 
 class nuScenesRCNNDataset(nuScenesDataset):
 
-    def __init__(self, nusc, split, mode, train_subset=False, train_subset_fold=4, 
-                 classes='all', npoints=16384, random_select=True, logger=None):
+    def __init__(self, nusc, split, mode, subset=False, subset_file=None,
+                 subset_fold=4, classes='all', npoints=16384, random_select=True, 
+                 logger=None):
         assert mode in ['TRAIN', 'EVAL', 'TEST'], 'Invalid mode: %s' % mode
         super(nuScenesRCNNDataset, self).__init__(nusc=nusc, split=split)
         
@@ -29,19 +30,27 @@ class nuScenesRCNNDataset(nuScenesDataset):
 
         if not self.random_select:
             self.logger.warning('random select is False')
-        
-        self.logger.info('Loading %s samples ... ' % self.mode)
-        self.preprocess_rpn_training_data()
 
-        if train_subset:
-            subset_length = int(self.sample_tokens.__len__() / train_subset_fold)
+        if subset and subset_file is not None:
+            self.logger.info('Loading a %s subset from %s ... \n ' % (self.mode, subset_file))
+            with open(subset_file, 'r') as f:
+                self.sample_tokens = [token.rstrip() for token in f.readlines()]
+            self.logger.info('Done, load a %s subset with %d samples.\n' % (self.mode, len(self.sample_tokens)))
+                
+        self.preprocess_rpn_training_data()
+        
+        if subset and subset_file is None:
+            self.logger.info('Sampling a %s subset ...\n' % self.mode)
+            subset_length = int(self.sample_tokens.__len__() / subset_fold)
             self.sample_tokens = random.sample(self.sample_tokens, subset_length)
+            self.logger.info('Done, sample a %s subset with %d samples.\n' % (self.mode, len(self.sample_tokens)))
     
     def preprocess_rpn_training_data(self):
         """
         Discard samples which don't have current classes, which will not be used for training.
         Valid sample_token is stored in self.sample_tokens
         """
+        self.logger.info('Filtering %s samples ... ' % self.mode)
         valid_tokens = []
         for sample_token in self.sample_tokens:
             sample_info = self.nusc.get('sample', sample_token)

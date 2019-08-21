@@ -130,6 +130,7 @@ TRAIN:
     SPLIT: train
     VAL_SPLIT: val
     TRAIN_SUBSET: False
+    TRAIN_SUBSET_FILE: None
     TRAIN_SUBSET_FOLD: 4
 
     LR: 0.002

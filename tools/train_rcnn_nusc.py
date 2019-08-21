@@ -29,13 +29,14 @@ parser.add_argument("--epochs", type=int, default=200, required=True, help="Numb
 
 parser.add_argument('--workers', type=int, default=8, help='number of workers for dataloader')
 parser.add_argument("--ckpt_save_interval", type=int, default=5, help="number of training epochs")
-parser.add_argument('--output_dir', type=str, default=None, help='specify an output directory if needed')
+parser.add_argument('--output_dir', type=str, default='output', help='specify an output directory if needed')
 parser.add_argument('--mgpus', action='store_true', default=False, help='whether to use multiple gpu')
 
 parser.add_argument("--ckpt", type=str, default=None, help="continue training from this checkpoint")
 parser.add_argument("--rpn_ckpt", type=str, default=None, help="specify the well-trained rpn checkpoint")
 parser.add_argument('--train_with_eval', action='store_true', default=False, help='whether to train with evaluation')
 parser.add_argument('--train_subset', action='store_true', default=False, help='whether to train on a subset')
+parser.add_argument('--train_subset_file', type=str, default=None, help='feed a fixed subset')
 parser.add_argument('--train_subset_fold', type=int, default=4, help='training subset fold')
 args = parser.parse_args()
 
@@ -57,8 +58,8 @@ def create_dataloader(logger):
 
     # create dataloader
     train_set = nuScenesRCNNDataset(nusc=nusc, npoints=cfg.RPN.NUM_POINTS, split=cfg.TRAIN.SPLIT, mode='TRAIN',
-                                    logger=logger, classes=cfg.CLASSES, train_subset=cfg.TRAIN.TRAIN_SUBSET,
-                                    train_subset_fold=cfg.TRAIN.TRAIN_SUBSET_FOLD)
+                                    logger=logger, classes=cfg.CLASSES, subset=cfg.TRAIN.TRAIN_SUBSET,
+                                    subset_file=cfg.TRAIN.TRAIN_SUBSET_FILE, subset_fold=cfg.TRAIN.TRAIN_SUBSET_FOLD)
     train_loader = DataLoader(train_set, batch_size=args.batch_size, pin_memory=True,
                               num_workers=args.workers, shuffle=True, collate_fn=train_set.collate_batch,
                               drop_last=True)
@@ -139,23 +140,18 @@ if __name__ == "__main__":
     if args.train_mode == 'rpn':
         cfg.RPN.ENABLED = True
         cfg.RCNN.ENABLED = False
-        root_result_dir = os.path.join('../', 'output', 'rpn', cfg.TAG)
+        root_result_dir = os.path.join('../', args.output_dir, 'rpn', cfg.TAG)
     elif args.train_mode == 'rcnn':
         cfg.RCNN.ENABLED = True
         cfg.RPN.ENABLED = cfg.RPN.FIXED = True
-        root_result_dir = os.path.join('../', 'output', 'rcnn', cfg.TAG)
-    elif args.train_mode == 'rcnn_offline':
-        cfg.RCNN.ENABLED = True
-        cfg.RPN.ENABLED = False
-        root_result_dir = os.path.join('../', 'output', 'rcnn', cfg.TAG)
+        root_result_dir = os.path.join('../', args.output_dir, 'rcnn', cfg.TAG)
     else:
         raise NotImplementedError
     
     cfg.TRAIN.TRAIN_SUBSET = args.train_subset
+    cfg.TRAIN.TRAIN_SUBSET_FILE = args.train_subset_file
     cfg.TRAIN.TRAIN_SUBSET_FOLD = args.train_subset_fold
 
-    if args.output_dir is not None:
-        root_result_dir = args.output_dir
     os.makedirs(root_result_dir, exist_ok=True)
 
     log_file = os.path.join(root_result_dir, 'log_train.txt')
@@ -183,6 +179,11 @@ if __name__ == "__main__":
 
     # create dataloader & network & optimizer
     train_loader, test_loader = create_dataloader(logger)
+    if args.train_subset:
+        subset_path = os.path.join(root_result_dir, 'subset_tokens.txt') 
+        with open(subset_path, 'w') as f:
+            for token in train_loader.dataset.sample_tokens:
+                f.write(token+'\n')
     model = PointRCNN(num_classes=train_loader.dataset.num_class, use_xyz=True, mode='TRAIN')
     optimizer = create_optimizer(model)
 
