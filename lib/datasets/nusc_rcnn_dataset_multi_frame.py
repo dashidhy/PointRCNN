@@ -32,18 +32,18 @@ class nuScenesRCNNDataset(nuScenesDataset):
             self.logger.warning('random select is False')
 
         if subset and subset_file is not None:
-            self.logger.info('Loading a %s subset from %s ... \n ' % (self.mode, subset_file))
+            self.logger.info('Loading a %s subset from %s ...' % (self.mode, subset_file))
             with open(subset_file, 'r') as f:
                 self.sample_tokens = [token.rstrip() for token in f.readlines()]
-            self.logger.info('Done, load a %s subset with %d samples.\n' % (self.mode, len(self.sample_tokens)))
+            self.logger.info('Done, load a %s subset with %d samples.' % (self.mode, len(self.sample_tokens)))
                 
         self.preprocess_rpn_training_data()
         
         if subset and subset_file is None:
-            self.logger.info('Sampling a %s subset ...\n' % self.mode)
+            self.logger.info('Sampling a %s subset ...' % self.mode)
             subset_length = int(self.sample_tokens.__len__() / subset_fold)
             self.sample_tokens = random.sample(self.sample_tokens, subset_length)
-            self.logger.info('Done, sample a %s subset with %d samples.\n' % (self.mode, len(self.sample_tokens)))
+            self.logger.info('Done, sample a %s subset with %d samples.' % (self.mode, len(self.sample_tokens)))
     
     def preprocess_rpn_training_data(self):
         """
@@ -62,7 +62,7 @@ class nuScenesRCNNDataset(nuScenesDataset):
                 else:
                     valid_tokens.append(sample_token)
 
-        self.logger.info('Done: filter valid %s samples: %d / %d\n' % (self.mode, len(valid_tokens), len(self.sample_tokens)))
+        self.logger.info('Done: filter valid %s samples: %d / %d' % (self.mode, len(valid_tokens), len(self.sample_tokens)))
         self.sample_tokens = valid_tokens
         return
     
