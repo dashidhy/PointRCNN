@@ -137,19 +137,7 @@ def eval_one_epoch_rpn(model, dataloader, epoch_id, result_dir, logger):
     for data in dataloader:
         sample_id_list, pts_rect, pts_features, pts_input = \
             data['sample_id'], data['pts_rect'], data['pts_features'], data['pts_input']
-        sample_id = sample_id_list[0]
         cnt += len(sample_id_list)
-
-        if not args.test:
-            rpn_cls_label, rpn_reg_label = data['rpn_cls_label'], data['rpn_reg_label']
-            gt_boxes3d = data['gt_boxes3d']
-
-            rpn_cls_label = torch.from_numpy(rpn_cls_label).cuda(non_blocking=True).long()
-            if gt_boxes3d.shape[1] == 0:  # (B, M, 7)
-                pass
-                # logger.info('%06d: No gt box' % sample_id)
-            else:
-                gt_boxes3d = torch.from_numpy(gt_boxes3d).cuda(non_blocking=True).float()
 
         inputs = torch.from_numpy(pts_input).cuda(non_blocking=True).float()
         input_data = {'pts_input': inputs}
@@ -157,7 +145,23 @@ def eval_one_epoch_rpn(model, dataloader, epoch_id, result_dir, logger):
         # model inference
         ret_dict = model(input_data)
         rpn_cls, rpn_reg = ret_dict['rpn_cls'], ret_dict['rpn_reg']
+        final_stage_pts_idx = ret_dict['pts_idx_list'][-1]
+        row = torch.arange(rpn_cls.size(0)).repeat(rpn_cls.size(1), 1).transpose(0, 1)
+        pts_features = pts_features[row, final_stage_pts_idx]
+        pts_rect = pts_rect[row, final_stage_pts_idx]
         backbone_xyz, backbone_features = ret_dict['backbone_xyz'], ret_dict['backbone_features']
+
+        if not args.test:
+            rpn_cls_label = data['rpn_cls_label']
+            gt_boxes3d = data['gt_boxes3d']
+
+            rpn_cls_label = torch.from_numpy(rpn_cls_label).cuda(non_blocking=True).long()
+            rpn_cls_label = rpn_cls_label[row, final_stage_pts_idx]
+            if gt_boxes3d.shape[1] == 0:  # (B, M, 7)
+                pass
+                # logger.info('%06d: No gt box' % sample_id)
+            else:
+                gt_boxes3d = torch.from_numpy(gt_boxes3d).cuda(non_blocking=True).float()
 
         rpn_scores_raw = rpn_cls[:, :, 0]
         rpn_scores = torch.sigmoid(rpn_scores_raw)
@@ -185,14 +189,12 @@ def eval_one_epoch_rpn(model, dataloader, epoch_id, result_dir, logger):
                     k -= 1
                 cur_gt_boxes3d = cur_gt_boxes3d[:k + 1]
 
-                recalled_num = 0
                 if cur_gt_boxes3d.shape[0] > 0:
                     iou3d = iou3d_utils.boxes_iou3d_gpu(cur_boxes3d, cur_gt_boxes3d[:, 0:7])
                     gt_max_iou, _ = iou3d.max(dim=0)
 
                     for idx, thresh in enumerate(thresh_list):
                         total_recalled_bbox_list[idx] += (gt_max_iou > thresh).sum().item()
-                    recalled_num = (gt_max_iou > 0.7).sum().item()
                     total_gt_bbox += cur_gt_boxes3d.__len__()
 
                 fg_mask = cur_rpn_cls_label > 0
@@ -485,15 +487,17 @@ def eval_one_epoch_joint(model, dataloader, epoch_id, result_dir, logger):
     progress_bar = tqdm.tqdm(total=len(dataloader), leave=True, desc='eval')
     for data in dataloader:
         cnt += 1
-        sample_id, pts_rect, pts_features, pts_input = \
-            data['sample_id'], data['pts_rect'], data['pts_features'], data['pts_input']
+        sample_id, pts_input = data['sample_id'], data['pts_input']
         batch_size = len(sample_id)
+        num_pts = pts_input.shape[1]
+        row = torch.arange(batch_size).repeat(num_pts, 1).transpose(0, 1)
         inputs = torch.from_numpy(pts_input).cuda(non_blocking=True).float()
         input_data = {'pts_input': inputs}
 
         # model inference
         ret_dict = model(input_data)
 
+        final_stage_pts_idx = ret_dict['ptx_idx_list'][-1]
         roi_scores_raw = ret_dict['roi_scores_raw']  # (B, M)
         roi_boxes3d = ret_dict['rois']  # (B, M, 7)
         seg_result = ret_dict['seg_result'].long()  # (B, N)
@@ -531,7 +535,8 @@ def eval_one_epoch_joint(model, dataloader, epoch_id, result_dir, logger):
         recalled_num = gt_num = rpn_iou = 0
         if not args.test:
             if not cfg.RPN.FIXED:
-                rpn_cls_label, rpn_reg_label = data['rpn_cls_label'], data['rpn_reg_label']
+                rpn_cls_label = data['rpn_cls_label']
+                rpn_cls_label = rpn_cls_label[row, final_stage_pts_idx]
                 rpn_cls_label = torch.from_numpy(rpn_cls_label).cuda(non_blocking=True).long()
 
             gt_boxes3d = data['gt_boxes3d']
@@ -550,7 +555,6 @@ def eval_one_epoch_joint(model, dataloader, epoch_id, result_dir, logger):
                     cur_gt_boxes3d = torch.from_numpy(cur_gt_boxes3d).cuda(non_blocking=True).float()
                     iou3d = iou3d_utils.boxes_iou3d_gpu(pred_boxes3d[k], cur_gt_boxes3d)
                     gt_max_iou, _ = iou3d.max(dim=0)
-                    refined_iou, _ = iou3d.max(dim=1)
 
                     for idx, thresh in enumerate(thresh_list):
                         total_recalled_bbox_list[idx] += (gt_max_iou > thresh).sum().item()
@@ -611,7 +615,6 @@ def eval_one_epoch_joint(model, dataloader, epoch_id, result_dir, logger):
 
             pred_boxes3d_selected = pred_boxes3d[k, cur_inds]
             raw_scores_selected = raw_scores[k, cur_inds]
-            norm_scores_selected = norm_scores[k, cur_inds]
 
             # NMS thresh
             # rotated nms

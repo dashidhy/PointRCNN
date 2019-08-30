@@ -12,7 +12,7 @@ def model_joint_fn_decorator():
 
     def model_fn(model, data):
         if cfg.RPN.ENABLED:
-            pts_rect, pts_features, pts_input = data['pts_rect'], data['pts_features'], data['pts_input']
+            pts_input = data['pts_input']
             gt_boxes3d = data['gt_boxes3d']
 
             if not cfg.RPN.FIXED:
@@ -38,8 +38,8 @@ def model_joint_fn_decorator():
         disp_dict = {}
         loss = 0
         if cfg.RPN.ENABLED and not cfg.RPN.FIXED:
-            rpn_cls, rpn_reg = ret_dict['rpn_cls'], ret_dict['rpn_reg']
-            rpn_loss = get_rpn_loss(model, rpn_cls, rpn_reg, rpn_cls_label, rpn_reg_label, tb_dict)
+            rpn_cls_list, pts_idx_list, rpn_reg = ret_dict['rpn_cls_list'], ret_dict['pts_idx_list'], ret_dict['rpn_reg']
+            rpn_loss = get_rpn_loss(model, rpn_cls_list, pts_idx_list, rpn_reg, rpn_cls_label, rpn_reg_label, tb_dict)
             loss += rpn_loss
             disp_dict['rpn_loss'] = rpn_loss.item()
 
@@ -52,48 +52,58 @@ def model_joint_fn_decorator():
 
         return ModelReturn(loss, tb_dict, disp_dict)
 
-    def get_rpn_loss(model, rpn_cls, rpn_reg, rpn_cls_label, rpn_reg_label, tb_dict):
+    def get_rpn_loss(model, rpn_cls_list, pts_idx_list, rpn_reg, rpn_cls_label, rpn_reg_label, tb_dict):
         if isinstance(model, nn.DataParallel):
             rpn_cls_loss_func = model.module.rpn.rpn_cls_loss_func
         else:
             rpn_cls_loss_func = model.rpn.rpn_cls_loss_func
 
-        rpn_cls_label_flat = rpn_cls_label.view(-1)
-        rpn_cls_flat = rpn_cls.view(-1)
-        fg_mask = (rpn_cls_label_flat > 0)
+        batch_size, num_pts = rpn_cls_label.size(0), rpn_cls_label.size(1)
+        row = torch.arange(batch_size).repeat(num_pts, 1).transpose(0, 1)
+        rpn_cls_loss_list = []
+        num_stage = len(rpn_cls_list)
+        for stage in range(num_stage):
+            rpn_cls_label_stage = rpn_cls_label[row, pts_idx_list[stage]]
+            rpn_cls_label_flat = rpn_cls_label_stage.view(-1)
+            rpn_cls_flat = rpn_cls_list[stage].view(-1)
+            fg_mask = (rpn_cls_label_flat > 0)
 
-        # RPN classification loss
-        if cfg.RPN.LOSS_CLS == 'DiceLoss':
-            rpn_loss_cls = rpn_cls_loss_func(rpn_cls, rpn_cls_label_flat)
+            # RPN classification loss
+            if cfg.RPN.LOSS_CLS == 'DiceLoss':
+                rpn_loss_cls = rpn_cls_loss_func(rpn_cls_list[stage], rpn_cls_label_flat)
+                rpn_cls_loss_list.append(rpn_loss_cls)
 
-        elif cfg.RPN.LOSS_CLS == 'SigmoidFocalLoss':
-            rpn_cls_target = (rpn_cls_label_flat > 0).float()
-            pos = (rpn_cls_label_flat > 0).float()
-            neg = (rpn_cls_label_flat == 0).float()
-            cls_weights = pos + neg
-            pos_normalizer = pos.sum()
-            cls_weights = cls_weights / torch.clamp(pos_normalizer, min=1.0)
-            rpn_loss_cls = rpn_cls_loss_func(rpn_cls_flat, rpn_cls_target, cls_weights)
-            rpn_loss_cls_pos = (rpn_loss_cls * pos).sum()
-            rpn_loss_cls_neg = (rpn_loss_cls * neg).sum()
-            rpn_loss_cls = rpn_loss_cls.sum()
-            tb_dict['rpn_loss_cls_pos'] = rpn_loss_cls_pos.item()
-            tb_dict['rpn_loss_cls_neg'] = rpn_loss_cls_neg.item()
+            elif cfg.RPN.LOSS_CLS == 'SigmoidFocalLoss':
+                rpn_cls_target = (rpn_cls_label_flat > 0).float()
+                pos = (rpn_cls_label_flat > 0).float()
+                neg = (rpn_cls_label_flat == 0).float()
+                cls_weights = pos + neg
+                pos_normalizer = pos.sum()
+                cls_weights = cls_weights / torch.clamp(pos_normalizer, min=1.0)
+                rpn_loss_cls = rpn_cls_loss_func(rpn_cls_flat, rpn_cls_target, cls_weights)
+                rpn_loss_cls_pos = (rpn_loss_cls * pos).sum()
+                rpn_loss_cls_neg = (rpn_loss_cls * neg).sum()
+                rpn_loss_cls = rpn_loss_cls.sum()
+                rpn_cls_loss_list.append(rpn_loss_cls)
+                tb_dict['rpn_loss_cls_pos_stage_'+str(stage)] = rpn_loss_cls_pos.item()
+                tb_dict['rpn_loss_cls_neg_stage_'+str(stage)] = rpn_loss_cls_neg.item()
 
-        elif cfg.RPN.LOSS_CLS == 'BinaryCrossEntropy':
-            weight = rpn_cls_flat.new(rpn_cls_flat.shape[0]).fill_(1.0)
-            weight[fg_mask] = cfg.RPN.FG_WEIGHT
-            rpn_cls_label_target = (rpn_cls_label_flat > 0).float()
-            batch_loss_cls = F.binary_cross_entropy(torch.sigmoid(rpn_cls_flat), rpn_cls_label_target,
-                                                    weight=weight, reduction='none')
-            cls_valid_mask = (rpn_cls_label_flat >= 0).float()
-            rpn_loss_cls = (batch_loss_cls * cls_valid_mask).sum() / torch.clamp(cls_valid_mask.sum(), min=1.0)
-        else:
-            raise NotImplementedError
+            elif cfg.RPN.LOSS_CLS == 'BinaryCrossEntropy':
+                weight = rpn_cls_flat.new(rpn_cls_flat.shape[0]).fill_(1.0)
+                weight[fg_mask] = cfg.RPN.FG_WEIGHT
+                rpn_cls_label_target = (rpn_cls_label_flat > 0).float()
+                batch_loss_cls = F.binary_cross_entropy(torch.sigmoid(rpn_cls_flat), rpn_cls_label_target,
+                                                        weight=weight, reduction='none')
+                cls_valid_mask = (rpn_cls_label_flat >= 0).float()
+                rpn_loss_cls = (batch_loss_cls * cls_valid_mask).sum() / torch.clamp(cls_valid_mask.sum(), min=1.0)
+                rpn_cls_loss_list.append(rpn_loss_cls)
+            else:
+                raise NotImplementedError
 
         # RPN regression loss
-        point_num = rpn_reg.size(0) * rpn_reg.size(1)
+        point_num = batch_size * num_pts
         fg_sum = fg_mask.long().sum().item()
+        rpn_reg_label = rpn_reg_label[row, pts_idx_list[-1]]
         if fg_sum != 0:
             loss_loc, loss_angle, loss_size, reg_loss_dict = \
                 loss_utils.get_reg_loss(rpn_reg.view(point_num, -1)[fg_mask],
@@ -109,12 +119,15 @@ def model_joint_fn_decorator():
             loss_size = 3 * loss_size  # consistent with old codes
             rpn_loss_reg = loss_loc + loss_angle + loss_size
         else:
-            loss_loc = loss_angle = loss_size = rpn_loss_reg = rpn_loss_cls * 0
+            loss_loc = loss_angle = loss_size = rpn_loss_reg = 0
 
-        rpn_loss = rpn_loss_cls * cfg.RPN.LOSS_WEIGHT[0] + rpn_loss_reg * cfg.RPN.LOSS_WEIGHT[1]
+        rpn_loss = rpn_loss_reg * cfg.RPN.LOSS_WEIGHT[1]
+        for stage in range(num_stage):
+            rpn_loss += rpn_cls_loss_list[stage] * cfg.RPN.LOSS_WEIGHT[0][stage]
+            tb_dict['rpn_loss_cls_stage_'+str(stage)] = rpn_cls_loss_list[stage].item()
 
-        tb_dict.update({'rpn_loss_cls': rpn_loss_cls.item(), 'rpn_loss_reg': rpn_loss_reg.item(),
-                        'rpn_loss': rpn_loss.item(), 'rpn_fg_sum': fg_sum, 'rpn_loss_loc': loss_loc.item(),
+        tb_dict.update({'rpn_loss': rpn_loss.item(),'rpn_loss_reg': rpn_loss_reg.item(),
+                        'rpn_fg_sum': fg_sum, 'rpn_loss_loc': loss_loc.item(),
                         'rpn_loss_angle': loss_angle.item(), 'rpn_loss_size': loss_size.item()})
 
         return rpn_loss

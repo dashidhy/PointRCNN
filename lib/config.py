@@ -49,6 +49,7 @@ __C.RPN.BACKBONE = 'pointnet2_msg'
 
 __C.RPN.USE_BN = True
 __C.RPN.NUM_POINTS = 16384
+__C.RPN.STAGES = 3
 
 __C.RPN.SA_CONFIG = edict()
 __C.RPN.SA_CONFIG.NPOINTS = [4096, 1024, 256, 64]

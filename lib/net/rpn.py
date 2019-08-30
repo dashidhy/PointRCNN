@@ -16,17 +16,6 @@ class RPN(nn.Module):
         MODEL = importlib.import_module(cfg.RPN.BACKBONE)
         self.backbone_net = MODEL.get_model(input_channels=int(cfg.RPN.USE_INTENSITY), use_xyz=use_xyz)
 
-        # classification branch
-        cls_layers = []
-        pre_channel = cfg.RPN.FP_MLPS[0][-1]
-        for k in range(0, cfg.RPN.CLS_FC.__len__()):
-            cls_layers.append(pt_utils.Conv1d(pre_channel, cfg.RPN.CLS_FC[k], bn=cfg.RPN.USE_BN))
-            pre_channel = cfg.RPN.CLS_FC[k]
-        cls_layers.append(pt_utils.Conv1d(pre_channel, 1, activation=None))
-        if cfg.RPN.DP_RATIO >= 0:
-            cls_layers.insert(1, nn.Dropout(cfg.RPN.DP_RATIO))
-        self.rpn_cls_layer = nn.Sequential(*cls_layers)
-
         # regression branch
         per_loc_bin_num = int(cfg.RPN.LOC_SCOPE / cfg.RPN.LOC_BIN_SIZE) * 2
         if cfg.RPN.LOC_XZ_FINE:
@@ -36,7 +25,7 @@ class RPN(nn.Module):
         reg_channel += 1  # reg y
 
         reg_layers = []
-        pre_channel = cfg.RPN.FP_MLPS[0][-1]
+        pre_channel = cfg.RPN.FP_MLPS[cfg.RPN.STAGES-1][0][-1]
         for k in range(0, cfg.RPN.REG_FC.__len__()):
             reg_layers.append(pt_utils.Conv1d(pre_channel, cfg.RPN.REG_FC[k], bn=cfg.RPN.USE_BN))
             pre_channel = cfg.RPN.REG_FC[k]
@@ -59,10 +48,7 @@ class RPN(nn.Module):
         self.init_weights()
 
     def init_weights(self):
-        if cfg.RPN.LOSS_CLS in ['SigmoidFocalLoss']:
-            pi = 0.01
-            nn.init.constant_(self.rpn_cls_layer[2].conv.bias, -np.log((1 - pi) / pi))
-
+        self.backbone_net.init_weights()
         nn.init.normal_(self.rpn_reg_layer[-1].conv.weight, mean=0, std=0.001)
 
     def forward(self, input_data):
@@ -71,12 +57,12 @@ class RPN(nn.Module):
         :return:
         """
         pts_input = input_data['pts_input']
-        backbone_xyz, backbone_features = self.backbone_net(pts_input)  # (B, N, 3), (B, C, N)
+        backbone_xyz, backbone_features, rpn_cls_list, pts_idx_list = self.backbone_net(pts_input)  # (B, N, 3), (B, C, N)
 
-        rpn_cls = self.rpn_cls_layer(backbone_features).transpose(1, 2).contiguous()  # (B, N, 1)
         rpn_reg = self.rpn_reg_layer(backbone_features).transpose(1, 2).contiguous()  # (B, N, C)
 
-        ret_dict = {'rpn_cls': rpn_cls, 'rpn_reg': rpn_reg,
+        ret_dict = {'rpn_cls': rpn_cls_list[-1], 'rpn_reg': rpn_reg,
+                    'rpn_cls_list': rpn_cls_list, 'pts_idx_list': pts_idx_list,
                     'backbone_xyz': backbone_xyz, 'backbone_features': backbone_features}
 
         return ret_dict
