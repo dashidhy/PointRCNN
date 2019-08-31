@@ -22,6 +22,7 @@ from tools.train_utils import learning_schedules_fastai as lsf
 parser = argparse.ArgumentParser(description="arg parser")
 parser.add_argument('--cfg_file', type=str, default='cfgs/default.yaml', help='specify the config for training')
 parser.add_argument("--train_mode", type=str, default='rpn', required=True, help="specify the training mode")
+parser.add_argument("--rpn_stages", type=int, default=None, required=True, help="specify the number of cascade stages")
 parser.add_argument("--batch_size", type=int, default=16, required=True, help="batch size for training")
 parser.add_argument("--epochs", type=int, default=200, required=True, help="Number of epochs to train for")
 
@@ -162,6 +163,9 @@ if __name__ == "__main__":
         root_result_dir = os.path.join('../', 'output', 'rcnn', cfg.TAG)
     else:
         raise NotImplementedError
+    
+    if args.rpn_stages is not None:
+        cfg.RPN.STAGES = args.rpn_stages
 
     if args.output_dir is not None:
         root_result_dir = args.output_dir
