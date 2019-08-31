@@ -107,9 +107,10 @@ class Pointnet2MSG_AC(nn.Module):
         '''
 
         batch_size, num_pts = pointcloud.size(0), pointcloud.size(1)
+        device = pointcloud.device
         pc_attention = pointcloud
-        pts_idx_in = torch.arange(num_pts).repeat(batch_size, 1) # (B, N)
-        row_sort = torch.arange(batch_size).repeat(num_pts, 1).transpose(0, 1) # (B, N)
+        pts_idx_in = torch.arange(num_pts).repeat(batch_size, 1).to(device) # (B, N)
+        row_sort = torch.arange(batch_size).repeat(num_pts, 1).transpose(0, 1).to(device) # (B, N)
         rpn_cls_list = []
         pts_idx_list = []
         
