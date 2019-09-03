@@ -28,7 +28,7 @@ np.random.seed(1024)  # set the same seed
 parser = argparse.ArgumentParser(description="arg parser")
 parser.add_argument('--cfg_file', type=str, default='cfgs/default.yml', help='specify the config for evaluation')
 parser.add_argument("--eval_mode", type=str, default='rpn', required=True, help="specify the evaluation mode")
-
+parser.add_argument("--rpn_stages", type=int, default=None, help="specify the number of cascade stages")
 parser.add_argument('--eval_all', action='store_true', default=False, help='whether to evaluate all checkpoints')
 parser.add_argument('--test', action='store_true', default=False, help='evaluate without ground truth')
 parser.add_argument("--ckpt", type=str, default=None, help="specify a checkpoint to be evaluated")
@@ -497,7 +497,7 @@ def eval_one_epoch_joint(model, dataloader, epoch_id, result_dir, logger):
         # model inference
         ret_dict = model(input_data)
 
-        final_stage_pts_idx = ret_dict['ptx_idx_list'][-1]
+        final_stage_pts_idx = ret_dict['pts_idx_list'][-1]
         roi_scores_raw = ret_dict['roi_scores_raw']  # (B, M)
         roi_boxes3d = ret_dict['rois']  # (B, M, 7)
         seg_result = ret_dict['seg_result'].long()  # (B, N)
@@ -894,6 +894,9 @@ if __name__ == "__main__":
 
     if args.output_dir is not None:
         root_result_dir = args.output_dir
+    
+    if args.rpn_stages is not None:
+        cfg.RPN.STAGES = args.rpn_stages
 
     os.makedirs(root_result_dir, exist_ok=True)
 
