@@ -1,6 +1,7 @@
 import numpy as np
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from pointnet2_lib.pointnet2.pointnet2_modules import PointnetFPModule, PointnetSAModuleMSG
 import pointnet2_lib.pointnet2.pytorch_utils as pt_utils
 from lib.config import cfg
@@ -77,8 +78,19 @@ class Pointnet2MSG_AC(nn.Module):
 
         self.pointnet2_stages = nn.ModuleList()
         self.rpn_cls_layers = nn.ModuleList()
+        self.feature_embedding_blocks = nn.ModuleList()
         channel_in = input_channels
         for stage in range(cfg.RPN.STAGES):
+
+            # feature embedding blocks
+            if stage > 0:
+                res_layers = []
+                pre_channel = channel_in
+                for k in range(cfg.RPN.RES_FC[stage-1].__len__() - 1):
+                    res_layers.append(pt_utils.Conv1d(pre_channel, cfg.RPN.RES_FC[stage-1][k], bn=cfg.RPN.USE_BN))
+                    pre_channel = cfg.RPN.RES_FC[stage-1][k]
+                res_layers.append(pt_utils.Conv1d(pre_channel, cfg.RPN.RES_FC[stage-1][-1], bn=cfg.RPN.USE_BN, activation=None))
+                self.feature_embedding_blocks.append(nn.Sequential(*res_layers))
 
             # pointnet++
             self.pointnet2_stages.append(Pointnet2MSG_SUB(stage=stage, input_channels=channel_in, use_xyz=use_xyz))
@@ -138,9 +150,15 @@ class Pointnet2MSG_AC(nn.Module):
 
             xyz, features = self.pointnet2_stages[stage](pc_attention) # (B, N, 3), (B, C, N)
 
-            if stage > 0: # cancatenate features from previous stages
+            if stage > 0:
+                # feed through feature embedding layer
+                features_prestage = features_prestage.transpose(1, 2).contiguous() # (B, C, num_pts - num_attention)
+                features_prestage_embedding = self.feature_embedding_blocks[stage-1](features_prestage)
+                features_prestage_embedding += features_prestage
+                features_prestage_embedding = F.relu(features_prestage_embedding, inplace=True)
+
                 xyz = torch.cat((xyz, xyz_prestage), dim=1)
-                features = torch.cat((features, features_prestage.transpose(1, 2)), dim=2)
+                features = torch.cat((features, features_prestage_embedding), dim=2)
             
             stage_cls = self.rpn_cls_layers[stage](features).transpose(1, 2).contiguous() # (B, N, 1)
             rpn_cls_list.append(stage_cls)
