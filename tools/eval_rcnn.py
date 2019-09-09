@@ -145,7 +145,7 @@ def eval_one_epoch_rpn(model, dataloader, epoch_id, result_dir, logger):
         # model inference
         ret_dict = model(input_data)
         rpn_cls, rpn_reg = ret_dict['rpn_cls'], ret_dict['rpn_reg']
-        final_stage_pts_idx = ret_dict['pts_idx_list'][-1]
+        final_stage_pts_idx = ret_dict['pts_idx_list'][-1].clone().cpu()
         row = torch.arange(rpn_cls.size(0)).repeat(rpn_cls.size(1), 1).transpose(0, 1)
         pts_features = pts_features[row, final_stage_pts_idx]
         pts_rect = pts_rect[row, final_stage_pts_idx]
@@ -497,7 +497,7 @@ def eval_one_epoch_joint(model, dataloader, epoch_id, result_dir, logger):
         # model inference
         ret_dict = model(input_data)
 
-        final_stage_pts_idx = ret_dict['pts_idx_list'][-1]
+        final_stage_pts_idx = ret_dict['pts_idx_list'][-1].clone().cpu()
         roi_scores_raw = ret_dict['roi_scores_raw']  # (B, M)
         roi_boxes3d = ret_dict['rois']  # (B, M, 7)
         seg_result = ret_dict['seg_result'].long()  # (B, N)
